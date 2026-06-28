@@ -39,7 +39,7 @@ export default function Home() {
     setError('');
 
     try {
-      const response = await fetch('/api/generate-and-publish', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
