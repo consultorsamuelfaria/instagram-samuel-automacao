@@ -1,0 +1,26 @@
+{
+  "name": "instagram-samuel-automacao",
+  "version": "1.0.0",
+  "description": "App de automação para publicar no Instagram com Claude + Meta API",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "@anthropic-ai/sdk": "latest",
+    "axios": "latest",
+    "dotenv": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
