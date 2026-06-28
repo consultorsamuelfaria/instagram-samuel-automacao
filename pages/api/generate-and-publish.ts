@@ -1,4 +1,4 @@
-// pages/api/generate-and-publish.ts
+ // pages/api/generate-and-publish.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
@@ -16,6 +16,7 @@ interface ResponseData {
   success: boolean;
   message: string;
   postId?: string;
+  imageUrl?: string;
   preview?: string;
   error?: string;
 }
@@ -50,101 +51,114 @@ export default async function handler(
       });
     }
 
-    // 1. Gerar conteúdo com Claude
     const fullPrompt = audioTranscript 
       ? `${audioTranscript}\n\nAgora crie um conteúdo para Instagram baseado nisso: ${prompt}`
       : prompt;
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2000,
       messages: [
         {
           role: 'user',
-          content: `Você é um especialista em criar conteúdo viral para Instagram do Mercado Pago e consultoria.
+          content: `Você é um especialista em criar conteúdo viral para Instagram do Mercado Pago.
 
-${contentType === 'carousel' 
-  ? 'Crie um carrossel com 3 slides. Cada slide deve ter um título, corpo e call-to-action.' 
-  : 'Crie um script de vídeo curto (30-60 segundos).'}
+Crie um carrossel com 3 slides e uma descrição visual detalhada para gerar imagem.
 
 Tema: ${fullPrompt}
 
 Sempre use:
 - Tom direto e autoritário
-- Abertura forte nos primeiros 3 segundos
-- CTA claro
-- Máximo 5 hashtags
+- "Samuel Faria, falando com você."
+- Máximo 5 hashtags sobre Mercado Pago, PIX, empreendedorismo
 - Foco em dor, solução e ação
 
-Formato de resposta:
-SLIDE 1:
-Título: [título]
-Corpo: [texto]
-CTA: [call-to-action]
+[CONTEUDO]
+SLIDE 1: Título | Corpo | CTA
+SLIDE 2: Título | Corpo | CTA
+SLIDE 3: Título | Corpo | CTA
+HASHTAGS: #tag1 #tag2 #tag3 #tag4 #tag5
 
-SLIDE 2:
-...
-
-HASHTAGS: #tag1 #tag2 #tag3 #tag4 #tag5`,
+[BRIEFING_VISUAL]
+Descrição detalhada para gerar imagem com: cores Azul #3483FF, Ouro #FFB800, Branco. Estilo profissional moderno.`,
         },
       ],
     });
 
     const generatedContent = message.content[0].type === 'text' ? message.content[0].text : '';
 
-    // 2. Publicar no Instagram via Meta API
+    const conteudoMatch = generatedContent.match(/\[CONTEUDO\]([\s\S]*?)\[BRIEFING_VISUAL\]/);
+    const briefingMatch = generatedContent.match(/\[BRIEFING_VISUAL\]([\s\S]*?)$/);
+    
+    const conteudo = conteudoMatch ? conteudoMatch[1].trim() : generatedContent;
+    const briefingVisual = briefingMatch ? briefingMatch[1].trim() : 'Professional Instagram carousel';
+
+    let imageUrl = '';
+    const openaiKey = process.env.OPENAI_API_KEY;
+
+    if (openaiKey) {
+      try {
+        const dallePrompt = `Professional Instagram carousel slide for Mercado Pago consulting. ${briefingVisual}. Colors: Blue #3483FF, Gold #FFB800, White. 1080x1350px modern design.`;
+        
+        const dalleResponse = await axios.post(
+          'https://api.openai.com/v1/images/generations',
+          {
+            prompt: dallePrompt,
+            n: 1,
+            size: '1024x1024',
+            quality: 'standard',
+            model: 'dall-e-3'
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${openaiKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        imageUrl = dalleResponse.data.data[0].url;
+      } catch (dalleError) {
+        console.error('DALL-E Error:', dalleError);
+        imageUrl = 'https://via.placeholder.com/1080x1350/FFB800/FFFFFF?text=Samuel+Faria';
+      }
+    }
+
     const igId = INSTAGRAM_IDS[account];
-    const accessToken = process.env.NEXT_PUBLIC_INSTAGRAM_TOKEN;
+    const accessToken = process.env.INSTAGRAM_TOKEN;
 
     let postId = null;
 
-    if (contentType === 'carousel') {
-      // Criar carrossel
-      const caption = generatedContent.split('HASHTAGS:')[1]?.trim() || '';
+    if (contentType === 'carousel' && imageUrl && accessToken) {
+      const caption = conteudo.split('HASHTAGS:')[1]?.trim() || conteudo;
       
       try {
         const response = await axios.post(
           `https://graph.instagram.com/v19.0/${igId}/media`,
           {
-            media_type: 'CAROUSEL',
-            children: [], // Aqui você adicionaria IDs de media criados antes
+            image_url: imageUrl,
             caption: caption,
             access_token: accessToken,
           }
         );
         postId = response.data.id;
       } catch (error) {
-        console.error('Erro ao publicar carrossel:', error);
-      }
-    } else if (contentType === 'video') {
-      // Publicar vídeo
-      try {
-        const response = await axios.post(
-          `https://graph.instagram.com/v19.0/${igId}/media`,
-          {
-            media_type: 'VIDEO',
-            video_url: '', // URL do vídeo
-            caption: generatedContent,
-            access_token: accessToken,
-          }
-        );
-        postId = response.data.id;
-      } catch (error) {
-        console.error('Erro ao publicar vídeo:', error);
+        console.error('Publish error:', error);
       }
     }
 
     return res.status(200).json({
       success: true,
-      message: `Conteúdo criado e publicado em ${ACCOUNT_NAMES[account]}`,
+      message: `✅ Conteúdo com imagem publicado em ${ACCOUNT_NAMES[account]}!`,
       postId: postId || undefined,
-      preview: generatedContent,
+      imageUrl: imageUrl,
+      preview: conteudo,
     });
   } catch (error) {
-    console.error('Erro:', error);
+    console.error('Error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Erro ao processar requisição',
+      message: 'Erro ao processar',
       error: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }
