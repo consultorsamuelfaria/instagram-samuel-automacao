@@ -19,8 +19,17 @@ export default async function handler(
       });
     }
 
+    const apiKey = process.env.CLAUDE_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'CLAUDE_API_KEY não configurada',
+      });
+    }
+
     const client = new Anthropic({
-      apiKey: process.env.NEXT_PUBLIC_CLAUDE_API_KEY,
+      apiKey: apiKey,
     });
 
     const message = await client.messages.create({
@@ -29,7 +38,7 @@ export default async function handler(
       messages: [
         {
           role: 'user',
-          content: `Crie um conteúdo para Instagram: ${prompt}`,
+          content: `Crie um conteúdo para Instagram com este tema: ${prompt}. Tom direto, autoridade, máximo 5 hashtags sobre Mercado Pago e empreendedorismo.`,
         },
       ],
     });
@@ -38,7 +47,7 @@ export default async function handler(
 
     return res.status(200).json({
       success: true,
-      message: 'Conteúdo gerado!',
+      message: 'Conteúdo gerado com sucesso!',
       preview: content,
     });
   } catch (error) {
