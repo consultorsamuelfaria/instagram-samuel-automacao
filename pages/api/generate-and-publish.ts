@@ -55,6 +55,7 @@ export default async function handler(
       ? `${audioTranscript}\n\nAgora crie um conteúdo para Instagram baseado nisso: ${prompt}`
       : prompt;
 
+    // 1. Gerar conteúdo com Claude
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
@@ -63,7 +64,7 @@ export default async function handler(
           role: 'user',
           content: `Você é um especialista em criar conteúdo viral para Instagram do Mercado Pago.
 
-Crie um carrossel com 3 slides e uma descrição visual detalhada para gerar imagem.
+Crie um carrossel com 3 slides e uma descrição visual detalhada.
 
 Tema: ${fullPrompt}
 
@@ -80,7 +81,7 @@ SLIDE 3: Título | Corpo | CTA
 HASHTAGS: #tag1 #tag2 #tag3 #tag4 #tag5
 
 [BRIEFING_VISUAL]
-Descrição detalhada para gerar imagem com: cores Azul #3483FF, Ouro #FFB800, Branco. Estilo profissional moderno.`,
+Descrição detalhada para gerar imagem: cores Azul #3483FF, Ouro #FFB800, Branco. Estilo profissional moderno.`,
         },
       ],
     });
@@ -91,14 +92,15 @@ Descrição detalhada para gerar imagem com: cores Azul #3483FF, Ouro #FFB800, B
     const briefingMatch = generatedContent.match(/\[BRIEFING_VISUAL\]([\s\S]*?)$/);
     
     const conteudo = conteudoMatch ? conteudoMatch[1].trim() : generatedContent;
-    const briefingVisual = briefingMatch ? briefingMatch[1].trim() : 'Professional Instagram carousel';
+    const briefingVisual = briefingMatch ? briefingMatch[1].trim() : 'Professional carousel';
 
-    let imageUrl = '';
+    // 2. Gerar imagem com DALL-E
+    let imageUrl = 'https://via.placeholder.com/1080x1350/FFB800/FFFFFF?text=Samuel+Faria';
     const openaiKey = process.env.OPENAI_API_KEY;
 
     if (openaiKey) {
       try {
-        const dallePrompt = `Professional Instagram carousel slide for Mercado Pago consulting. ${briefingVisual}. Colors: Blue #3483FF, Gold #FFB800, White. 1080x1350px modern design.`;
+        const dallePrompt = `Professional Instagram carousel slide for Mercado Pago. ${briefingVisual}. Colors: Blue #3483FF, Gold #FFB800, White. 1080x1350px.`;
         
         const dalleResponse = await axios.post(
           'https://api.openai.com/v1/images/generations',
@@ -117,19 +119,21 @@ Descrição detalhada para gerar imagem com: cores Azul #3483FF, Ouro #FFB800, B
           }
         );
 
-        imageUrl = dalleResponse.data.data[0].url;
+        if (dalleResponse.data?.data?.[0]?.url) {
+          imageUrl = dalleResponse.data.data[0].url;
+        }
       } catch (dalleError) {
         console.error('DALL-E Error:', dalleError);
-        imageUrl = 'https://via.placeholder.com/1080x1350/FFB800/FFFFFF?text=Samuel+Faria';
       }
     }
 
+    // 3. Publicar no Instagram
     const igId = INSTAGRAM_IDS[account];
     const accessToken = process.env.INSTAGRAM_TOKEN;
 
     let postId = null;
 
-    if (contentType === 'carousel' && imageUrl && accessToken) {
+    if (contentType === 'carousel' && imageUrl && accessToken && igId) {
       const caption = conteudo.split('HASHTAGS:')[1]?.trim() || conteudo;
       
       try {
@@ -143,13 +147,13 @@ Descrição detalhada para gerar imagem com: cores Azul #3483FF, Ouro #FFB800, B
         );
         postId = response.data.id;
       } catch (error) {
-        console.error('Publish error:', error);
+        console.error('Instagram publish error:', error);
       }
     }
 
     return res.status(200).json({
       success: true,
-      message: `✅ Conteúdo com imagem publicado em ${ACCOUNT_NAMES[account]}!`,
+      message: `✅ Conteúdo gerado com imagem!${postId ? ' Publicado no Instagram!' : ''}`,
       postId: postId || undefined,
       imageUrl: imageUrl,
       preview: conteudo,
